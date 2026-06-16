@@ -1,0 +1,91 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: rce-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  postgres:
+    image: postgres:16
+    container_name: rce-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rce_user
+      POSTGRES_PASSWORD: rce_password
+      POSTGRES_DB: rce_engine
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: rce-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  api-gateway:
+    image: node:24-alpine
+    container_name: rce-api-gateway
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      PORT: 3000
+      MONGO_URL: mongodb://mongodb:27017/rce_engine
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: rce_user
+      POSTGRES_PASSWORD: rce_password
+      POSTGRES_DB: rce_engine
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../api-gateway:/app
+    depends_on:
+      - mongodb
+      - postgres
+      - redis
+
+  worker:
+    image: node:24-alpine
+    container_name: rce-worker
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - ../worker:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+
+  frontend:
+    image: node:24-alpine
+    container_name: rce-frontend
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_URL: http://localhost:3000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend:/app
+    depends_on:
+      - api-gateway
+
+volumes:
+  mongodb_data:
+  postgres_data:
+  redis_data:
